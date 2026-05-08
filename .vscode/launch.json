@@ -1,0 +1,13 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "java",
+            "name": "App",
+            "request": "launch",
+            "mainClass": "App",
+            "projectName": "first java app_a6316840",
+            "vmArgs": "--module-path \"C:\\Users\\FORBIT\\Desktop\\javafx\\lib\" --add-modules javafx.controls,javafx.fxml --enable-native-access=javafx.graphics -Dprism.order=sw -Dprism.verbose=true -Djavafx.embed.singleThread=true -Djavafx.platform=desktop -Djava.library.path=\"C:\\Users\\FORBIT\\Desktop\\javafx\\bin\""
+        }
+    ]
+}
