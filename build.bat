@@ -1,21 +1,32 @@
 @echo off
-setlocal
+echo Building HyperSync...
 
-set JAVA_BIN=C:\Program Files\Eclipse Adoptium\jdk-25.0.1.8-hotspot\bin
+REM ── Adjust these paths for your system ──────────────────────────────────────
 set JAVAFX_LIB=C:\Users\FORBIT\Desktop\javafx\lib
+set SRC=src
+set OUT=bin
 
-echo Compiling HyperSync...
+REM ── Clean ───────────────────────────────────────────────────────────────────
+if exist %OUT% rmdir /s /q %OUT%
+mkdir %OUT%
 
-"%JAVA_BIN%\javac.exe" --module-path "%JAVAFX_LIB%" --add-modules javafx.controls,javafx.fxml -d bin src\server\MyServer.java src\client\App.java
+REM ── Compile (server first, then client which references server) ──────────────
+javac --module-path %JAVAFX_LIB% ^
+      --add-modules javafx.controls ^
+      -d %OUT% ^
+      %SRC%\server\MyServer.java ^
+      %SRC%\server\ClientHandler.java ^
+      %SRC%\server\QuizEngine.java ^
+      %SRC%\server\LobbyManager.java ^
+      %SRC%\server\ScoreTracker.java ^
+      %SRC%\client\App.java ^
+      %SRC%\client\MyClient.java
 
-if errorlevel 1 (
-  echo.
-  echo [ERROR] Compile failed. Check the errors above.
-  pause
-  exit /b 1
+if %ERRORLEVEL% NEQ 0 (
+    echo BUILD FAILED.
+    pause
+    exit /b 1
 )
 
-echo.
-echo [SUCCESS] Compile success! All packages are linked.
+echo BUILD SUCCESS.
 pause
-endlocal
