@@ -103,16 +103,19 @@ public class ClientHandler implements Runnable {
                 answeredCurrent = true;
 
                 server.receiveAnswer(name, option, timestamp);
-                if (option.equalsIgnoreCase(
-                        currentQuestion.correctOption)) {
+                ScoreTracker.PlayerScore ps
+                        = server.getScoreTracker()
+                                .getScores()
+                                .get(name);
 
-                    ScoreTracker.PlayerScore ps
-                            = server.getScoreTracker()
-                                    .getScores()
-                                    .get(name);
+                if (ps != null) {
 
-                    if (ps != null) {
-                        ps.points += 10;
+                    ps.totalTimeMs += timestamp;
+
+                    if (option.equalsIgnoreCase(
+                            currentQuestion.correctOption)) {
+
+                        ps.points+= server.getPointsPerQuestion();
                     }
                 }
 

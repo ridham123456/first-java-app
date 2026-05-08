@@ -33,6 +33,7 @@ public class MyServer {
     private QuizEngine quizEngine;
     private volatile boolean quizRunning = false;
      private int finishedStudents = 0;
+     private int pointsPerQuestion = 10;
 
    // private volatile boolean quizRunning = false;
 
@@ -65,8 +66,9 @@ public class MyServer {
     }
 
     // Called by teacher to configure and start quiz
-    public void setupQuiz(String mode, int totalQuestions, int timeValue, List<QuizEngine.Question> questions) {
+    public void setupQuiz(String mode, int totalQuestions, int timeValue,int points,List<QuizEngine.Question> questions) {
         quizEngine = new QuizEngine(mode, totalQuestions, timeValue, questions);
+        pointsPerQuestion = points;
         scoreTracker.init(lobbyManager.getStudentNames());
     }
 
@@ -183,4 +185,7 @@ public class MyServer {
     private String padRight(String s, int n) {
         return String.format("%-" + n + "s", s);
     }
+    public int getPointsPerQuestion() {
+    return pointsPerQuestion;
+}
 }

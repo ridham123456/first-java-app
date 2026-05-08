@@ -39,6 +39,7 @@ public class MyClient extends Application {
     private long questionStartTime;
     private boolean answered = false;
     private volatile boolean timerRunning = false;
+    private Thread timerThread;
 
     private Label timerLabel;
     private Label waitingCountLabel;
@@ -103,6 +104,14 @@ public class MyClient extends Application {
         });
 
         VBox root = centeredVBox(20, title, subtitle, nameField, ipField, errLabel, btnJoin);
+        Label dummy = new Label();
+        dummy.setFocusTraversable(true);
+
+        root.getChildren().add(0, dummy);
+
+        Platform.runLater(() -> {
+            primaryStage.getScene().getRoot().requestFocus();
+        });
         setScene(root);
     }
 
@@ -172,9 +181,13 @@ public class MyClient extends Application {
                     );
 
             timerRunning = false;
-            timerRunning = true;
 
-            new Thread(() -> {
+            if (timerThread != null) {
+                timerThread.interrupt();
+            }
+
+            timerRunning = true;
+            timerThread = new Thread(() -> {
 
                 for (int t = secs; t >= 0 && timerRunning; t--) {
 
@@ -212,7 +225,9 @@ public class MyClient extends Application {
                     }
                 }
 
-            }).start();
+            });
+            timerThread.setDaemon(true);
+            timerThread.start();
         } else if (msg.startsWith(MyServer.MSG_SCORES)) {
             String json = msg.substring(MyServer.MSG_SCORES.length());
             showMidRoundScores(json);
@@ -507,16 +522,40 @@ public class MyClient extends Application {
     }
 
     private List<String[]> parseScoresJson(String json) {
+
         List<String[]> result = new ArrayList<>();
-        String[] entries = json.replaceAll("[\\[\\]{}]", "").split("(?<=\\}),(?=\\{)");
+
+        json = json.trim();
+
+        if (json.startsWith("[")) {
+            json = json.substring(1);
+        }
+
+        if (json.endsWith("]")) {
+            json = json.substring(0, json.length() - 1);
+        }
+
+        String[] entries = json.split("\\},\\{");
+
         for (String entry : entries) {
+
+            entry = entry.replace("{", "")
+                    .replace("}", "");
+
             String name = extractVal(entry, "name");
             String points = extractVal(entry, "points");
             String timeMs = extractVal(entry, "timeMs");
+
             if (name != null && points != null) {
-                result.add(new String[]{name, points, timeMs != null ? timeMs : "0"});
+
+                result.add(new String[]{
+                    name,
+                    points,
+                    timeMs != null ? timeMs : "0"
+                });
             }
         }
+
         return result;
     }
 
