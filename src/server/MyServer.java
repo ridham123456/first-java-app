@@ -6,8 +6,7 @@ import java.util.*;
 
 public class MyServer {
 
-    // ── Protocol constants ──────────────────────────────────────────────────
-    // Server → Client messages
+    
     public static final String MSG_JOINED        = "JOINED:";          // JOINED:<name>
     public static final String MSG_STUDENT_LIST  = "STUDENT_LIST:";    // STUDENT_LIST:A,B,C
     public static final String MSG_QUESTION      = "QUESTION:";        // QUESTION:<json>
@@ -32,8 +31,10 @@ public class MyServer {
     private final LobbyManager lobbyManager = new LobbyManager();
     private final ScoreTracker scoreTracker = new ScoreTracker();
     private QuizEngine quizEngine;
-
     private volatile boolean quizRunning = false;
+     private int finishedStudents = 0;
+
+   // private volatile boolean quizRunning = false;
 
     public static MyServer INSTANCE;
 
@@ -69,7 +70,8 @@ public class MyServer {
         scoreTracker.init(lobbyManager.getStudentNames());
     }
 
-    public void startQuiz() {
+    public void startQuiz() 
+    {
         if (quizEngine == null) {
         System.out.println("Quiz not configured.");
         return;
@@ -80,55 +82,44 @@ public class MyServer {
         return;
     }
         quizRunning = true;
+        scoreTracker.init(
+    lobbyManager.getStudentNames()
+);
         broadcast(MSG_START);
-        new Thread(this::runQuizLoop).start();
-    }
+            synchronized (clients) {
 
-    private void runQuizLoop() {
-        while (quizEngine.hasNextQuestion()) {
-            QuizEngine.Question q = quizEngine.nextQuestion();
-            scoreTracker.resetRoundAnswers();
+        for (ClientHandler ch : clients) {
 
-            // Build question JSON manually (no external libs)
-            String qJson = buildQuestionJson(q, quizEngine.getCurrentIndex(), quizEngine.getTotalQuestions());
-            broadcast(MSG_QUESTION + qJson);
-
-            // Timer countdown
-            int timeLeft = quizEngine.getTimePerQuestion();
-            for (int t = timeLeft; t >= 0; t--) {
-                broadcast(MSG_TIMER + t);
-
-            if (scoreTracker.allAnswered(lobbyManager.getCount())) {
-                break;
+            if (!ch.isTeacher()) {
+                ch.sendNextQuestion();
             }
 
-            try {
-                Thread.sleep(1000);
-            } catch (InterruptedException ignored) {}
             }
 
-            // Reveal correct answer & broadcast scores
-            String correct = q.correctOption;
-            scoreTracker.finalizeRound(correct, quizEngine.getMode());
-
-            String scoresJson = scoreTracker.getScoresJson();
-            broadcast(MSG_SCORES + scoresJson);
-
-            // Short pause between questions
-            try { Thread.sleep(3000); } catch (InterruptedException ignored) {}
         }
+       
+    }    
+    
 
-        // Quiz finished
-        quizRunning = false;
-        String finalJson = scoreTracker.getFinalScoreboardJson();
-        broadcast(MSG_QUIZ_END + finalJson);
-    }
-
-    // Called from ClientHandler when a student submits an answer
+    //Called from ClientHandler when a student submits an answer
     public synchronized void receiveAnswer(String studentName, String option, long timestamp) {
         if (!quizRunning) return;
         scoreTracker.recordAnswer(studentName, option, timestamp);
     }
+    public synchronized void studentFinished() {
+
+    finishedStudents++;
+
+    if (finishedStudents >= lobbyManager.getCount()) {
+
+        quizRunning = false;
+
+        String finalJson =
+            scoreTracker.getFinalScoreboardJson();
+        System.out.println(finalJson);
+        broadcast(MSG_QUIZ_END + finalJson);
+    }
+}
 
     public void broadcast(String message) {
         synchronized (clients) {
@@ -150,6 +141,9 @@ public class MyServer {
     }
 
     public LobbyManager getLobbyManager() { return lobbyManager; }
+    public QuizEngine getQuizEngine() {
+    return quizEngine;
+    }
     public ScoreTracker getScoreTracker() { return scoreTracker; }
     public boolean isQuizRunning() { return quizRunning; }
     public List<ClientHandler> getClients() { return clients; }
@@ -167,7 +161,7 @@ public class MyServer {
         broadcast(MSG_STUDENT_LIST + names);
     }
 
-    private String buildQuestionJson(QuizEngine.Question q, int index, int total) {
+    public  String buildQuestionJson(QuizEngine.Question q, int index, int total) {
         return "{\"index\":" + index +
                ",\"total\":" + total +
                ",\"text\":\"" + escape(q.text) + "\"" +

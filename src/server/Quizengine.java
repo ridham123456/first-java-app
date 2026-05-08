@@ -58,6 +58,9 @@ public class QuizEngine {
      * Marathon: divide total time equally.
      * Rapid Fire: fixed timeValue per question.
      */
+    public List<Question> getQuestions() {
+    return questions;
+    }
     public int getTimePerQuestion() {
         if (mode.equalsIgnoreCase("Marathon")) {
             return totalQuestions > 0 ? timeValue / totalQuestions : 60;

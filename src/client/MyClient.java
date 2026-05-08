@@ -18,29 +18,30 @@ import java.util.*;
 public class MyClient extends Application {
 
     // ── Styles ───────────────────────────────────────────────────────────────
-    private static final String BG      = "-fx-background-color: #0f172a;";
-    private static final String C_LIME  = "#deff9a";
+    private static final String BG = "-fx-background-color: #0f172a;";
+    private static final String C_LIME = "#deff9a";
     private static final String C_GREEN = "#22c55e";
-    private static final String C_RED   = "#f87171";
-    private static final String C_DARK  = "#1e293b";
+    private static final String C_RED = "#f87171";
+    private static final String C_DARK = "#1e293b";
     private static final String C_SLATE = "#94a3b8";
 
-    private static final String[] OPT_COLORS  = {"#3b82f6", "#a855f7", "#f59e0b", "#22c55e"};
+    private static final String[] OPT_COLORS = {"#3b82f6", "#a855f7", "#f59e0b", "#22c55e"};
     private static final String[] OPT_LETTERS = {"A", "B", "C", "D"};
 
     // ── State ────────────────────────────────────────────────────────────────
-    private PrintWriter    out;
+    private PrintWriter out;
     private BufferedReader in;
-    private Thread         listenerThread;
+    private Thread listenerThread;
 
     private String studentName;
-    private Stage  primaryStage;
+    private Stage primaryStage;
 
-    private long    questionStartTime;
+    private long questionStartTime;
     private boolean answered = false;
+    private volatile boolean timerRunning = false;
 
-    private Label   timerLabel;
-    private Label   waitingCountLabel;
+    private Label timerLabel;
+    private Label waitingCountLabel;
 
     // ── Launch ───────────────────────────────────────────────────────────────
     @Override
@@ -68,18 +69,18 @@ public class MyClient extends Application {
 
     // ── Connect Screen ────────────────────────────────────────────────────────
     private void showConnectScreen() {
-        Label title    = bigLabel("HYPERSYNC", C_LIME);
+        Label title = bigLabel("HYPERSYNC", C_LIME);
         Label subtitle = smallLabel("Student Portal", C_SLATE);
 
         TextField nameField = inputField("Your Name");
-        TextField ipField   = inputField("Teacher's Server IP  (e.g. 192.168.1.5)");
-        Label     errLabel  = smallLabel("", C_RED);
+        TextField ipField = inputField("Teacher's Server IP  (e.g. 192.168.1.5)");
+        Label errLabel = smallLabel("", C_RED);
 
         Button btnJoin = primaryBtn("JOIN GAME");
 
         btnJoin.setOnAction(e -> {
             String name = nameField.getText().trim();
-            String ip   = ipField.getText().trim();
+            String ip = ipField.getText().trim();
 
             if (name.isEmpty() || ip.isEmpty()) {
                 errLabel.setText("Please enter your name and the server IP.");
@@ -109,7 +110,7 @@ public class MyClient extends Application {
         try {
             Socket socket = new Socket(host, port);
             out = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), "UTF-8"), true);
-            in  = new BufferedReader(new InputStreamReader(socket.getInputStream(), "UTF-8"));
+            in = new BufferedReader(new InputStreamReader(socket.getInputStream(), "UTF-8"));
             out.println(MyServer.CMD_JOIN + name);
             startListener();
             return true;
@@ -126,7 +127,8 @@ public class MyClient extends Application {
                     final String msg = line;
                     Platform.runLater(() -> handleMessage(msg));
                 }
-            } catch (IOException ignored) {}
+            } catch (IOException ignored) {
+            }
         });
         listenerThread.setDaemon(true);
         listenerThread.start();
@@ -137,17 +139,15 @@ public class MyClient extends Application {
         if (msg.startsWith(MyServer.MSG_JOINED)) {
             // Join confirmed — already showing waiting screen
 
-        }
-        else if (msg.startsWith(MyServer.MSG_ERROR)) {
-             String err = msg.substring(MyServer.MSG_ERROR.length());
+        } else if (msg.startsWith(MyServer.MSG_ERROR)) {
+            String err = msg.substring(MyServer.MSG_ERROR.length());
 
             Alert alert = new Alert(Alert.AlertType.ERROR);
             alert.setHeaderText("Connection Error");
             alert.setContentText(err);
             alert.showAndWait();
             Platform.exit();
-        } 
-        else if (msg.startsWith(MyServer.MSG_STUDENT_LIST)) {
+        } else if (msg.startsWith(MyServer.MSG_STUDENT_LIST)) {
             String names = msg.substring(MyServer.MSG_STUDENT_LIST.length());
             int count = names.trim().isEmpty() ? 0 : names.split(",").length;
             if (waitingCountLabel != null) {
@@ -165,13 +165,54 @@ public class MyClient extends Application {
             showQuestionScreen(q);
 
         } else if (msg.startsWith(MyServer.MSG_TIMER)) {
-            int secs = Integer.parseInt(msg.substring(MyServer.MSG_TIMER.length()));
-            if (timerLabel != null) {
-                timerLabel.setText("" + secs);
-                timerLabel.setStyle("-fx-font-size: 36px; -fx-font-weight: bold; -fx-text-fill: " +
-                    (secs <= 5 ? C_RED : C_LIME) + ";");
-            }
 
+            int secs
+                    = Integer.parseInt(
+                            msg.substring(MyServer.MSG_TIMER.length())
+                    );
+
+            timerRunning = false;
+            timerRunning = true;
+
+            new Thread(() -> {
+
+                for (int t = secs; t >= 0 && timerRunning; t--) {
+
+                    final int time = t;
+
+                    Platform.runLater(() -> {
+
+                        if (timerLabel != null) {
+
+                            timerLabel.setText("" + time);
+
+                            timerLabel.setStyle(
+                                    "-fx-font-size: 36px;"
+                                    + "-fx-font-weight: bold;"
+                                    + "-fx-text-fill: "
+                                    + (time <= 5 ? C_RED : C_LIME)
+                                    + ";"
+                            );
+                        }
+
+                    });
+
+                    if (time == 0 && !answered) {
+
+                        answered = true;
+
+                        out.println(
+                                MyServer.CMD_ANSWER
+                                + "NO_ANSWER:0"
+                        );
+                    }
+                    try {
+                        Thread.sleep(1000);
+                    } catch (InterruptedException ignored) {
+                    }
+                }
+
+            }).start();
         } else if (msg.startsWith(MyServer.MSG_SCORES)) {
             String json = msg.substring(MyServer.MSG_SCORES.length());
             showMidRoundScores(json);
@@ -197,7 +238,11 @@ public class MyClient extends Application {
             while (true) {
                 final String f = frames[i++ % frames.length];
                 Platform.runLater(() -> dots.setText(f));
-                try { Thread.sleep(350); } catch (InterruptedException ex) { break; }
+                try {
+                    Thread.sleep(350);
+                } catch (InterruptedException ex) {
+                    break;
+                }
             }
         }).start();
 
@@ -208,14 +253,15 @@ public class MyClient extends Application {
     // ── Ready Screen ──────────────────────────────────────────────────────────
     private void showReadyScreen() {
         Label head = bigLabel("GET READY!", C_LIME);
-        Label sub  = smallLabel("First question coming up...", "white");
-        VBox root  = centeredVBox(20, head, sub);
+        Label sub = smallLabel("First question coming up...", "white");
+        VBox root = centeredVBox(20, head, sub);
         setScene(root);
     }
 
     // ── Question Screen ───────────────────────────────────────────────────────
     private void showQuestionScreen(Map<String, String> q) {
         // Timer
+        timerRunning = false;
         timerLabel = new Label("--");
         timerLabel.setStyle("-fx-font-size: 36px; -fx-font-weight: bold; -fx-text-fill: " + C_LIME + ";");
 
@@ -250,8 +296,8 @@ public class MyClient extends Application {
 
         for (int i = 0; i < 4; i++) {
             final String letter = OPT_LETTERS[i];
-            final String color  = OPT_COLORS[i];
-            final int    idx    = i;
+            final String color = OPT_COLORS[i];
+            final int idx = i;
 
             Button btn = new Button(letter + ".   " + opts[i]);
             btn.setMaxWidth(400);
@@ -259,15 +305,17 @@ public class MyClient extends Application {
             btn.setMinHeight(80);
             btn.setWrapText(true);
             btn.setStyle(
-                "-fx-background-color: " + C_DARK + "; -fx-text-fill: white; " +
-                "-fx-font-size: 18px; -fx-font-weight: bold; -fx-padding: 14 22; " +
-                "-fx-background-radius: 12; -fx-border-color: " + color + "; " +
-                "-fx-border-width: 2; -fx-border-radius: 12; -fx-cursor: hand;"
+                    "-fx-background-color: " + C_DARK + "; -fx-text-fill: white; "
+                    + "-fx-font-size: 18px; -fx-font-weight: bold; -fx-padding: 14 22; "
+                    + "-fx-background-radius: 12; -fx-border-color: " + color + "; "
+                    + "-fx-border-width: 2; -fx-border-radius: 12; -fx-cursor: hand;"
             );
             btns[i] = btn;
 
             btn.setOnAction(e -> {
-                if (answered) return;
+                if (answered) {
+                    return;
+                }
                 answered = true;
                 long elapsed = System.currentTimeMillis() - questionStartTime;
                 out.println(MyServer.CMD_ANSWER + letter + ":" + elapsed);
@@ -281,14 +329,11 @@ public class MyClient extends Application {
                 }
                 btn.setOpacity(1.0);
                 btn.setStyle(
-                    "-fx-background-color: " + color + "; -fx-text-fill: white; " +
-                    "-fx-font-size: 18px; -fx-font-weight: bold; -fx-padding: 14 22; " +
-                    "-fx-background-radius: 12; -fx-cursor: hand;"
+                        "-fx-background-color: " + color + "; -fx-text-fill: white; "
+                        + "-fx-font-size: 18px; -fx-font-weight: bold; -fx-padding: 14 22; "
+                        + "-fx-background-radius: 12; -fx-cursor: hand;"
                 );
 
-                Label waiting = smallLabel("Answer submitted! Waiting for others...", C_SLATE);
-                waiting.setPadding(new Insets(10, 0, 0, 0));
-                grid.add(waiting, 0, 2, 2, 1);
             });
 
             grid.add(btn, i % 2, i / 2);
@@ -303,7 +348,7 @@ public class MyClient extends Application {
     private void showMidRoundScores(String json) {
         List<String[]> entries = parseScoresJson(json);
 
-        Label head    = bigLabel("SCORES", C_LIME);
+        Label head = bigLabel("SCORES", C_LIME);
         Label waiting = smallLabel("Next question coming up...", C_SLATE);
 
         VBox list = new VBox(8);
@@ -311,9 +356,9 @@ public class MyClient extends Application {
         String[] medals = {"1st", "2nd", "3rd"};
 
         for (int i = 0; i < entries.size(); i++) {
-            String  rank = (i < 3) ? medals[i] : ("#" + (i + 1));
-            String  name = entries.get(i)[0];
-            String  pts  = entries.get(i)[1] + " pts";
+            String rank = (i < 3) ? medals[i] : ("#" + (i + 1));
+            String name = entries.get(i)[0];
+            String pts = entries.get(i)[1] + " pts";
             boolean isMe = name.equals(studentName);
 
             HBox row = new HBox(15);
@@ -321,9 +366,9 @@ public class MyClient extends Application {
             row.setMaxWidth(440);
             row.setPadding(new Insets(10, 18, 10, 18));
             row.setStyle(
-                "-fx-background-color: " + (isMe ? "#1e3a5f" : C_DARK) + "; " +
-                "-fx-background-radius: 10;" +
-                (isMe ? " -fx-border-color: " + C_LIME + "; -fx-border-width: 2; -fx-border-radius: 10;" : "")
+                    "-fx-background-color: " + (isMe ? "#1e3a5f" : C_DARK) + "; "
+                    + "-fx-background-radius: 10;"
+                    + (isMe ? " -fx-border-color: " + C_LIME + "; -fx-border-width: 2; -fx-border-radius: 10;" : "")
             );
 
             Label rl = smallLabel(rank, "white");
@@ -331,8 +376,8 @@ public class MyClient extends Application {
             rl.setStyle("-fx-font-size: 16px; -fx-text-fill: white; -fx-font-weight: bold;");
 
             Label nl = new Label(name + (isMe ? "  (you)" : ""));
-            nl.setStyle("-fx-font-size: 16px; -fx-text-fill: " + (isMe ? C_LIME : "white") +
-                        "; -fx-font-weight: bold;");
+            nl.setStyle("-fx-font-size: 16px; -fx-text-fill: " + (isMe ? C_LIME : "white")
+                    + "; -fx-font-weight: bold;");
             HBox.setHgrow(nl, Priority.ALWAYS);
 
             Label pl = smallLabel(pts, C_SLATE);
@@ -361,7 +406,10 @@ public class MyClient extends Application {
         // Find my rank
         int myRank = 1;
         for (int i = 0; i < entries.size(); i++) {
-            if (entries.get(i)[0].equals(studentName)) { myRank = i + 1; break; }
+            if (entries.get(i)[0].equals(studentName)) {
+                myRank = i + 1;
+                break;
+            }
         }
         Label myRankLabel = smallLabel("Your rank:  #" + myRank, C_GREEN);
         myRankLabel.setStyle("-fx-font-size: 22px; -fx-text-fill: " + C_GREEN + "; -fx-font-weight: bold;");
@@ -371,34 +419,34 @@ public class MyClient extends Application {
         String[] medals = {"1st", "2nd", "3rd"};
 
         for (int i = 0; i < entries.size(); i++) {
-            String  rank   = (i < 3) ? medals[i] : ("#" + (i + 1));
-            String  name   = entries.get(i)[0];
-            String  pts    = entries.get(i)[1] + " pts";
-            long    timeMs = Long.parseLong(entries.get(i)[2]);
-            boolean isMe   = name.equals(studentName);
-            boolean hasTie = i + 1 < entries.size() &&
-                             entries.get(i)[1].equals(entries.get(i + 1)[1]);
+            String rank = (i < 3) ? medals[i] : ("#" + (i + 1));
+            String name = entries.get(i)[0];
+            String pts = entries.get(i)[1] + " pts";
+            long timeMs = Long.parseLong(entries.get(i)[2]);
+            boolean isMe = name.equals(studentName);
+            boolean hasTie = i + 1 < entries.size()
+                    && entries.get(i)[1].equals(entries.get(i + 1)[1]);
 
             HBox row = new HBox(15);
             row.setAlignment(Pos.CENTER_LEFT);
             row.setMaxWidth(520);
             row.setPadding(new Insets(12, 20, 12, 20));
             row.setStyle(
-                "-fx-background-color: " + (isMe ? "#1e3a5f" : C_DARK) + "; " +
-                "-fx-background-radius: 10;" +
-                (isMe ? " -fx-border-color: " + C_LIME + "; -fx-border-width: 2; -fx-border-radius: 10;" : "") +
-                (hasTie && !isMe ? " -fx-border-color: #fbbf24; -fx-border-width: 1; -fx-border-radius: 10;" : "")
+                    "-fx-background-color: " + (isMe ? "#1e3a5f" : C_DARK) + "; "
+                    + "-fx-background-radius: 10;"
+                    + (isMe ? " -fx-border-color: " + C_LIME + "; -fx-border-width: 2; -fx-border-radius: 10;" : "")
+                    + (hasTie && !isMe ? " -fx-border-color: #fbbf24; -fx-border-width: 1; -fx-border-radius: 10;" : "")
             );
 
             Label rl = new Label(rank);
-            rl.setStyle("-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: " +
-                        (hasTie ? "#fbbf24" : "white") + ";");
+            rl.setStyle("-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: "
+                    + (hasTie ? "#fbbf24" : "white") + ";");
             rl.setMinWidth(50);
 
             VBox nameBox = new VBox(3);
             Label nl = new Label(name + (isMe ? "  (you)" : "") + (hasTie ? "  [Tiebreak]" : ""));
-            nl.setStyle("-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: " +
-                        (isMe ? C_LIME : (hasTie ? "#fbbf24" : "white")) + ";");
+            nl.setStyle("-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: "
+                    + (isMe ? C_LIME : (hasTie ? "#fbbf24" : "white")) + ";");
             Label tl = new Label("Answer time: " + (timeMs / 1000.0) + "s");
             tl.setStyle("-fx-font-size: 12px; -fx-text-fill: " + C_SLATE + ";");
             nameBox.getChildren().addAll(nl, tl);
@@ -422,7 +470,6 @@ public class MyClient extends Application {
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
-
     private VBox centeredVBox(int spacing, javafx.scene.Node... nodes) {
         VBox box = new VBox(spacing);
         box.setAlignment(Pos.CENTER);
@@ -446,16 +493,16 @@ public class MyClient extends Application {
         TextField tf = new TextField();
         tf.setPromptText(prompt);
         tf.setMaxWidth(380);
-        tf.setStyle("-fx-background-color: #1e293b; -fx-text-fill: white; " +
-                    "-fx-font-size: 16px; -fx-padding: 12; -fx-background-radius: 8;");
+        tf.setStyle("-fx-background-color: #1e293b; -fx-text-fill: white; "
+                + "-fx-font-size: 16px; -fx-padding: 12; -fx-background-radius: 8;");
         return tf;
     }
 
     private Button primaryBtn(String text) {
         Button b = new Button(text);
-        b.setStyle("-fx-background-color: " + C_LIME + "; -fx-text-fill: #1a1a1a; " +
-                   "-fx-font-size: 22px; -fx-font-weight: bold; -fx-padding: 15 45; " +
-                   "-fx-background-radius: 10; -fx-cursor: hand;");
+        b.setStyle("-fx-background-color: " + C_LIME + "; -fx-text-fill: #1a1a1a; "
+                + "-fx-font-size: 22px; -fx-font-weight: bold; -fx-padding: 15 45; "
+                + "-fx-background-radius: 10; -fx-cursor: hand;");
         return b;
     }
 
@@ -463,7 +510,7 @@ public class MyClient extends Application {
         List<String[]> result = new ArrayList<>();
         String[] entries = json.replaceAll("[\\[\\]{}]", "").split("(?<=\\}),(?=\\{)");
         for (String entry : entries) {
-            String name   = extractVal(entry, "name");
+            String name = extractVal(entry, "name");
             String points = extractVal(entry, "points");
             String timeMs = extractVal(entry, "timeMs");
             if (name != null && points != null) {
@@ -477,7 +524,9 @@ public class MyClient extends Application {
         Map<String, String> map = new LinkedHashMap<>();
         for (String k : new String[]{"index", "total", "text", "optA", "optB", "optC", "optD"}) {
             String v = extractVal(json, k);
-            if (v != null) map.put(k, v);
+            if (v != null) {
+                map.put(k, v);
+            }
         }
         return map;
     }
@@ -485,23 +534,36 @@ public class MyClient extends Application {
     private String extractVal(String json, String key) {
         String pat = "\"" + key + "\":";
         int idx = json.indexOf(pat);
-        if (idx < 0) return null;
+        if (idx < 0) {
+            return null;
+        }
         String rest = json.substring(idx + pat.length()).trim();
         if (rest.startsWith("\"")) {
             int end = rest.indexOf("\"", 1);
             return end > 0 ? rest.substring(1, end) : null;
         } else {
             int end = rest.indexOf(",");
-            if (end < 0) end = rest.indexOf("}");
+            if (end < 0) {
+                end = rest.indexOf("}");
+            }
             return end > 0 ? rest.substring(0, end).trim() : rest.trim();
         }
     }
-            @Override
-            public void stop() {
-                try {
-                    if (out != null) out.close();
-                    if (in != null) in.close();
-                } catch (Exception ignored) {}
+
+    @Override
+    public void stop() {
+        try {
+            if (out != null) {
+                out.close();
             }
-    public static void main(String[] args) { launch(args); }
+            if (in != null) {
+                in.close();
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    public static void main(String[] args) {
+        launch(args);
+    }
 }

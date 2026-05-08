@@ -30,9 +30,21 @@ public class ScoreTracker {
     private final Map<String, RoundAnswer> answers =Collections.synchronizedMap(new LinkedHashMap<>());
 
     public void init(List<String> names) {
-        scores.clear();
-        for (String n : names) scores.put(n, new PlayerScore(n));
+
+    scores.clear();
+    answers.clear();
+
+    for (String n : names) {
+
+        PlayerScore ps = new PlayerScore(n);
+
+        ps.points = 0;
+        ps.totalTimeMs = 0;
+        ps.streak = 0;
+
+        scores.put(n, ps);
     }
+}
 
     public void resetRoundAnswers() {
         answers.clear();
